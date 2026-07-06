@@ -103,22 +103,36 @@ def rating_widget(label, key):
 def number_slider(label, key):
     return st.slider(label, 0, 10, 5, key=key)
 
-st.markdown(
-    """
-    <style>
-    .block-container { padding-top: 1rem; padding-bottom: 5rem; max-width: 820px; }
-    h1, h2, h3, p, label, div, span { font-size: 1.02rem; }
-    .stButton button {
-        width: 100%;
-        padding: 0.85rem 1rem;
-        border-radius: 14px;
-        font-size: 1.05rem;
-        font-weight: 600;
-    }
-    </style>
-    """,
-    unsafe_allow_html=True,
-)
+st.markdown("### Delete entries")
+for idx, row in df.sort_values("created_at", ascending=False).iterrows():
+    entry_id = row.get("entry_id", "")
+    if not entry_id:
+        entry_id = str(uuid.uuid4())
+        df.at[idx, "entry_id"] = entry_id
+
+    with st.container(border=True):
+        st.write(f"**Date:** {row.get('date','')} | **Dose:** {row.get('dosage','')} | **Status:** {row.get('status','')}")
+        st.write(f"**Taken @:** {row.get('taken_time','')} | **Lasted till:** {row.get('lasted_till','')}")
+        st.write(f"**Attention:** {row.get('attention','')} | **Organization:** {row.get('organization','')} | **Tasks:** {row.get('starting_tasks','')}")
+        st.write(f"**Anxiety:** {row.get('anxiety','')} | **Side effects:** {row.get('side_effects','')}")
+        confirm_key = f"confirm_delete_{entry_id}"
+
+        if st.button("Delete this entry", key=f"delete_{entry_id}"):
+            st.session_state[confirm_key] = True
+
+        if st.session_state.get(confirm_key, False):
+            st.warning("Tap confirm to permanently delete this entry.")
+            col_a, col_b = st.columns(2)
+            with col_a:
+                if st.button("Confirm delete", key=f"confirm_{entry_id}"):
+                    delete_entry(entry_id)
+                    st.session_state[confirm_key] = False
+                    st.success("Entry deleted.")
+                    st.rerun()
+            with col_b:
+                if st.button("Cancel", key=f"cancel_{entry_id}"):
+                    st.session_state[confirm_key] = False
+                    st.rerun()
 
 st.title("💊 ADHD Medication Tracker")
 st.caption("Mobile-first daily log based on your medication symptom tracker.")
