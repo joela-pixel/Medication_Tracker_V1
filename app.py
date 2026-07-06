@@ -2,7 +2,7 @@ import streamlit as st
 import pandas as pd
 from pathlib import Path
 from datetime import datetime, date
-import os
+import uuid
 
 st.set_page_config(
     page_title="ADHD Med Tracker",
@@ -34,6 +34,7 @@ SIDE_EFFECTS = [
 EXERCISE_OPTIONS = ["10m", "20m", "30m", "more"]
 
 FIELDS = [
+    "entry_id",
     "date",
     "days_taken",
     "taken_time",
@@ -53,6 +54,7 @@ FIELDS = [
     "exercise",
     "anything_else",
     "week_notes",
+    "status",
     "created_at",
 ]
 
@@ -64,8 +66,6 @@ def load_data():
     ensure_csv()
     try:
         df = pd.read_csv(CSV_PATH)
-        if "date" in df.columns:
-            df["date"] = pd.to_datetime(df["date"], errors="coerce").dt.date
         return df
     except Exception:
         return pd.DataFrame(columns=FIELDS)
@@ -77,14 +77,15 @@ def save_row(row):
     df = pd.concat([df, row_df], ignore_index=True)
     df.to_csv(CSV_PATH, index=False)
 
+def delete_entry(entry_id):
+    ensure_csv()
+    df = pd.read_csv(CSV_PATH)
+    if "entry_id" in df.columns:
+        df = df[df["entry_id"] != entry_id]
+        df.to_csv(CSV_PATH, index=False)
+
 def rating_widget(label, key):
-    return st.radio(
-        label,
-        SYMP_RATINGS,
-        horizontal=True,
-        key=key,
-        index=0,
-    )
+    return st.radio(label, SYMP_RATINGS, horizontal=True, key=key, index=0)
 
 def number_slider(label, key):
     return st.slider(label, 0, 10, 5, key=key)
@@ -101,7 +102,6 @@ st.markdown(
         font-size: 1.05rem;
         font-weight: 600;
     }
-    section[data-testid="stSidebar"] { display: none; }
     </style>
     """,
     unsafe_allow_html=True,
@@ -124,7 +124,7 @@ with tab1:
             days_taken = st.multiselect(
                 "Day(s) taken",
                 ["M", "T", "W", "Th", "F", "Sa", "Su"],
-                default=[datetime.now().strftime("%a")[:1]],
+                default=[],
             )
             lasted_till = st.text_input("Lasted till", placeholder="Example: 2:30 PM")
             easy_sleep = st.radio("Easy to fall asleep?", ["Yes", "No"], horizontal=True)
@@ -158,11 +158,13 @@ with tab1:
 
         anything_else = st.text_area("Anything else?", placeholder="Notes about mood, stress, illness, travel, period, etc.")
         week_notes = st.text_area("Other important notes from this week", placeholder="Anything that may have affected how you felt that was not the medication.")
+        status = st.radio("Entry status", ["Complete", "Incomplete"], horizontal=True, index=0)
 
         submitted = st.form_submit_button("Save entry")
 
     if submitted:
         row = {
+            "entry_id": str(uuid.uuid4()),
             "date": str(log_date),
             "days_taken": ",".join(days_taken),
             "taken_time": taken_time,
@@ -182,6 +184,7 @@ with tab1:
             "exercise": exercise,
             "anything_else": anything_else,
             "week_notes": week_notes,
+            "status": status,
             "created_at": datetime.now().isoformat(timespec="seconds"),
         }
         save_row(row)
@@ -194,39 +197,39 @@ with tab2:
         st.info("No entries yet.")
     else:
         show_cols = [
-            "date", "dosage", "taken_time", "lasted_till",
+            "date", "status", "dosage", "taken_time", "lasted_till",
             "attention", "organization", "starting_tasks", "anxiety",
             "tired_0_10", "hunger_0_10", "sleep_0_10", "side_effects"
         ]
-        display_df = df.copy()
         for col in show_cols:
-            if col not in display_df.columns:
-                display_df[col] = ""
-        display_df = display_df[show_cols].sort_values("date", ascending=False)
-        st.dataframe(display_df, use_container_width=True, hide_index=True)
+            if col not in df.columns:
+                df[col] = ""
+        display_df = df[show_cols].copy()
+        st.dataframe(display_df.sort_values("date", ascending=False), use_container_width=True, hide_index=True)
 
-        st.markdown("### Latest entry")
-        latest = df.sort_values("created_at", ascending=False).iloc[0]
-        st.write({
-            "Date": latest.get("date", ""),
-            "Dosage": latest.get("dosage", ""),
-            "Taken @": latest.get("taken_time", ""),
-            "Lasted till": latest.get("lasted_till", ""),
-            "Attention": latest.get("attention", ""),
-            "Organization": latest.get("organization", ""),
-            "Starting Tasks": latest.get("starting_tasks", ""),
-            "Anxiety": latest.get("anxiety", ""),
-            "Side effects": latest.get("side_effects", ""),
-            "Tired": latest.get("tired_0_10", ""),
-            "Hunger": latest.get("hunger_0_10", ""),
-            "Sleep": latest.get("sleep_0_10", ""),
-            "Sleep hygiene bedtime": latest.get("sleep_bedtime", ""),
-            "Screen time end": latest.get("screen_time_end", ""),
-            "Easy to fall asleep": latest.get("easy_sleep", ""),
-            "Exercise": latest.get("exercise", ""),
-            "Anything else": latest.get("anything_else", ""),
-            "Weekly notes": latest.get("week_notes", ""),
-        })
+        st.markdown("### Delete entries")
+        for _, row in df.sort_values("created_at", ascending=False).iterrows():
+            with st.container(border=True):
+                st.write(f"**Date:** {row.get('date','')} | **Dose:** {row.get('dosage','')} | **Status:** {row.get('status','')}")
+                st.write(f"**Taken @:** {row.get('taken_time','')} | **Lasted till:** {row.get('lasted_till','')}")
+                st.write(f"**Attention:** {row.get('attention','')} | **Organization:** {row.get('organization','')} | **Tasks:** {row.get('starting_tasks','')}")
+                st.write(f"**Anxiety:** {row.get('anxiety','')} | **Side effects:** {row.get('side_effects','')}")
+                confirm_key = f"confirm_delete_{row['entry_id']}"
+                if st.button("Delete this entry", key=f"delete_{row['entry_id']}"):
+                    st.session_state[confirm_key] = True
+                if st.session_state.get(confirm_key, False):
+                    st.warning("Tap confirm to permanently delete this entry.")
+                    col_a, col_b = st.columns(2)
+                    with col_a:
+                        if st.button("Confirm delete", key=f"confirm_{row['entry_id']}"):
+                            delete_entry(row["entry_id"])
+                            st.session_state[confirm_key] = False
+                            st.success("Entry deleted.")
+                            st.rerun()
+                    with col_b:
+                        if st.button("Cancel", key=f"cancel_{row['entry_id']}"):
+                            st.session_state[confirm_key] = False
+                            st.rerun()
 
 with tab3:
     st.subheader("Export")
@@ -242,14 +245,9 @@ with tab3:
             mime="text/csv",
             use_container_width=True,
         )
-
-        st.markdown("### Quick summary")
-        total = len(df)
-        st.metric("Total entries", total)
-
-        for col in ["attention", "organization", "starting_tasks", "anxiety"]:
-            if col in df.columns and not df[col].dropna().empty:
-                st.write(f"**{col.replace('_', ' ').title()}**")
-                st.write(df[col].value_counts().reindex(SYMP_RATINGS, fill_value=0))
+        st.markdown("### Summary")
+        st.metric("Total entries", len(df))
+        if "status" in df.columns:
+            st.write(df["status"].value_counts())
 
 st.caption("Use this app for personal tracking only. It does not replace medical advice.")
