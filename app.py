@@ -66,9 +66,22 @@ def load_data():
     ensure_csv()
     try:
         df = pd.read_csv(CSV_PATH)
-        return df
     except Exception:
         return pd.DataFrame(columns=FIELDS)
+
+    for col in FIELDS:
+        if col not in df.columns:
+            df[col] = ""
+
+    if df["entry_id"].isna().all() or (df["entry_id"].astype(str).str.strip() == "").all():
+        df["entry_id"] = [str(uuid.uuid4()) for _ in range(len(df))]
+
+    if "created_at" in df.columns:
+        df["created_at"] = df["created_at"].fillna("")
+    if "status" in df.columns:
+        df["status"] = df["status"].fillna("Complete")
+
+    return df
 
 def save_row(row):
     ensure_csv()
