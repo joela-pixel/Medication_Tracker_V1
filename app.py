@@ -114,7 +114,7 @@ tab1, tab2, tab3 = st.tabs(["Today", "History", "Export"])
 
 with tab1:
     st.subheader("Daily log")
-    with st.form("daily_log", clear_on_submit=False):
+    with st.form("daily_log", clear_on_submit=False, enter_to_submit=False):
         c1, c2 = st.columns(2)
         with c1:
             log_date = st.date_input("Date", value=date.today())
