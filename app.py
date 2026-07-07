@@ -73,15 +73,24 @@ def load_data():
         if col not in df.columns:
             df[col] = ""
 
-    if "entry_id" in df.columns:
-        missing = df["entry_id"].astype(str).str.strip() == ""
-        if missing.any():
-            df.loc[missing, "entry_id"] = [str(uuid.uuid4()) for _ in range(missing.sum())]
+    changed = False
+    if "entry_id" not in df.columns:
+        df["entry_id"] = ""
+        changed = True
+
+    df["entry_id"] = df["entry_id"].astype(str).fillna("").str.strip()
+    missing = df["entry_id"] == ""
+    if missing.any():
+        df.loc[missing, "entry_id"] = [str(uuid.uuid4()) for _ in range(missing.sum())]
+        changed = True
 
     if "status" in df.columns:
         df["status"] = df["status"].fillna("Complete")
     if "created_at" in df.columns:
         df["created_at"] = df["created_at"].fillna("")
+
+    if changed:
+        df.to_csv(CSV_PATH, index=False)
 
     return df
 
@@ -97,7 +106,8 @@ def delete_entry(entry_id):
     df = pd.read_csv(CSV_PATH)
     if "entry_id" not in df.columns:
         return
-    df = df[df["entry_id"].astype(str) != str(entry_id)]
+    df["entry_id"] = df["entry_id"].astype(str).fillna("").str.strip()
+    df = df[df["entry_id"] != str(entry_id)]
     df.to_csv(CSV_PATH, index=False)
 
 def rating_widget(label, key):
@@ -230,7 +240,7 @@ with tab2:
         st.dataframe(display_df.sort_values("date", ascending=False), use_container_width=True, hide_index=True)
 
         st.markdown("### Delete entries")
-        for _, row in df.sort_values("created_at", ascending=False).iterrows():
+        for i, (_, row) in enumerate(df.sort_values("created_at", ascending=False).iterrows()):
             entry_id = str(row.get("entry_id", "")).strip()
             if not entry_id:
                 continue
@@ -240,22 +250,22 @@ with tab2:
                 st.write(f"**Taken @:** {row.get('taken_time','')} | **Lasted till:** {row.get('lasted_till','')}")
                 st.write(f"**Attention:** {row.get('attention','')} | **Organization:** {row.get('organization','')} | **Tasks:** {row.get('starting_tasks','')}")
                 st.write(f"**Anxiety:** {row.get('anxiety','')} | **Side effects:** {row.get('side_effects','')}")
-                confirm_key = f"confirm_delete_{entry_id}"
+                confirm_key = f"confirm_delete_{i}_{entry_id}"
 
-                if st.button("Delete this entry", key=f"delete_{entry_id}"):
+                if st.button("Delete this entry", key=f"delete_{i}_{entry_id}"):
                     st.session_state[confirm_key] = True
 
                 if st.session_state.get(confirm_key, False):
                     st.warning("Tap confirm to permanently delete this entry.")
                     col_a, col_b = st.columns(2)
                     with col_a:
-                        if st.button("Confirm delete", key=f"confirm_{entry_id}"):
+                        if st.button("Confirm delete", key=f"confirm_{i}_{entry_id}"):
                             delete_entry(entry_id)
                             st.session_state[confirm_key] = False
                             st.success("Entry deleted.")
                             st.rerun()
                     with col_b:
-                        if st.button("Cancel", key=f"cancel_{entry_id}"):
+                        if st.button("Cancel", key=f"cancel_{i}_{entry_id}"):
                             st.session_state[confirm_key] = False
                             st.rerun()
 
